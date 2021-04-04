@@ -7,7 +7,7 @@
           <input v-model="tableSchema" />
         </label>
         <label>
-          <span>Table:</span>
+          <span>Table: (or alias)</span>
           <input v-model="tableName" />
         </label>
         <label>
