@@ -1,34 +1,38 @@
 <template>
   <div class="home">
-    <form @submit.prevent="debugQuery">
-      <label>
-        <span>Schema:</span>
-        <input v-model="tableSchema" />
-      </label>
-      <label>
-        <span>Table:</span>
-        <input v-model="tableName" />
-      </label>
-      <label>
-        <span>Column:</span>
-        <input v-model="tableColumn" />
-      </label>
-      <label>
-        <span>Value:</span>
-        <input v-model="tableColumnValue" />
-      </label>
-      <monaco-editor ref="editor"
-        v-model="content"
-        class="editor"
-        language="sql"
-        @editorWillMount="editorWillMount" />
+    <aside class="side-wrapper">
+      <form @submit.prevent="debugQuery">
+        <label>
+          <span>Schema:</span>
+          <input v-model="tableSchema" />
+        </label>
+        <label>
+          <span>Table:</span>
+          <input v-model="tableName" />
+        </label>
+        <label>
+          <span>Column:</span>
+          <input v-model="tableColumn" />
+        </label>
+        <label>
+          <span>Value:</span>
+          <input v-model="tableColumnValue" />
+        </label>
 
-      <input
-        class="debug-query-btn"
-        type="submit"
-        value="Debug Query"
-      />
-    </form>
+        <button :disabled="loading" class="debug-query-btn" type="submit">
+          <span v-if="loading">Debugging...</span>
+          <span v-else>Debug Query</span>
+        </button>
+      </form>
+    </aside>
+
+    <div class="editor-wrapper">
+        <monaco-editor ref="editor"
+          v-model="content"
+          class="editor"
+          language="sql"
+          @editorWillMount="editorWillMount" />
+    </div>
   </div>
 </template>
 
@@ -50,6 +54,7 @@ export default {
   },
   data() {
     return {
+      loading: false,
       tableSchema: "public",
       tableName: "stories",
       tableColumn: "id",
@@ -143,6 +148,8 @@ export default {
       this.monaco = monaco;
     },
     debugQuery() {
+      this.loading = true;
+
       electron.ipcRenderer.invoke('why-missing', [
         this.tableSchema, this.tableName, this.tableColumn, this.tableColumnValue, this.content
       ]);
@@ -150,10 +157,12 @@ export default {
       electron.ipcRenderer.once('why-missing-replay', (event, {join, where}) => {
         this.highlightProblems(join);
         this.highlightProblems(where);
+        this.loading = false;
       });
 
       electron.ipcRenderer.once('why-missing-failed', (event, message) => {
         alert(message);
+        this.loading = false;
       })
     },
     highlightProblems(problems) {
@@ -191,18 +200,31 @@ export default {
 </script>
 <style lang="scss">
 .home {
+  display: grid;
+  grid-template-columns: 1fr 3fr;
+  height: 100%;
+
   form {
-    margin-bottom: 1em;
+    padding: 1em;
     label {
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
+      grid-template-columns: 1fr 2fr;
       margin-bottom: 0.25em;
+    }
+
+    .debug-query-btn {
+      margin: 1em 0;
+
     }
   }
 
-  .editor {
-    width: 100%;
-    height: 40vh;
+  .editor-wrapper {
+    overflow: hidden;
+    padding: .5em 0;
+    .editor {
+      width: calc(100%);
+      height: calc(100% - .5em);
+    }
   }
 
   .why-missing-problem {

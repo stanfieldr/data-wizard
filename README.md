@@ -17,7 +17,7 @@ assumes the db is on port `5432` and the db host is `postgres.my-hidden-db.my-we
 ssh -N -L 4545:postgres.my-hidden-db.my-website.com:5432 user@bastion-domain.com
 ```
 
-Then your env file would look like this
+Then your env.local file would look like this
 ```bash
 DB_HOST=localhost
 DB_PORT=4545
