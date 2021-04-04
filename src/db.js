@@ -2,10 +2,10 @@ const { Client } = require("pg");
 
 let connected = false;
 let client = new Client({
-  host: "localhost",
-  port: 4545,
-  user: "",
-  password: "",
+  host: process.env.DB_HOST,
+  port: process.env.DB_PORT,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASS,
 });
 
 export default async function getClient() {

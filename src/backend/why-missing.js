@@ -19,6 +19,8 @@ export default async function findProblems(table, column, value, query) {
     },
   ];
 
+  console.log(JSON.stringify(stmts, null, 2));
+
   let findRecordExpr = createExprToFindRecord(table, column, value);
   let whereProblems = await findWhereProblems(stmts[0], findRecordExpr);
   let joinProblems = await findJoinProblems(stmts[0], findRecordExpr);
@@ -43,7 +45,7 @@ function findIndexes(query, problems) {
   return problems.map(problem => {
     let condition = deparse(problem);
     let key = Object.keys(problem)[0];
-    return [problem[key].location, condition.length];
+    return [problem[key].location, problem[key].location + condition.length, condition];
   });
 }
 

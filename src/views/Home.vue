@@ -13,8 +13,11 @@
         <span>Value:</span>
         <input v-model="tableColumnValue" />
       </label>
-
-      <textarea v-model="content"></textarea>
+      <monaco-editor ref="editor"
+        v-model="content"
+        class="editor"
+        language="sql"
+        @editorWillMount="editorWillMount" />
 
       <input
         class="debug-query-btn"
@@ -22,32 +25,33 @@
         value="Debug Query"
       />
     </form>
-    <!-- <v-ace-editor
-      @init="setEditor"
-      @change="clearMarkers"
-      v-model="content"
-      :options="aceOptions"
-      lang="sql"
-      theme="monokai"
-      height="50vh"
-    /> -->
   </div>
 </template>
 
 <script>
 // @ is an alias to /src
-// import whyMissing from "@/backend/why-missing";
 import electron from "electron";
-// import { parseFirst } from "pgsql-ast-parser";
+import MonacoEditor from 'vue-monaco';
 
 export default {
   name: "Home",
+  components: {
+    MonacoEditor,
+  },
+  mounted() {
+    window.addEventListener('resize', this.resizeListener);
+  },
+  unmounted() {
+    window.removeEventListener('resize', this.resizeListener);
+  },
   data() {
     return {
-      tableName: "",
-      tableColumn: "",
-      tableColumnValue: null,
-      editor: null,
+      tableName: "stories",
+      tableColumn: "id",
+      tableColumnValue: 1283022,
+      monaco: null,
+      decorations: [],
+      decorationIds: [],
       content: `
         SELECT
     *
@@ -114,15 +118,20 @@ export default {
     "stories"."published_at" DESC,
     "stories"."id" DESC
       `,
-      errorMarkers: [],
-      aceOptions: {
-        fontFamily: "Source Code Pro",
-        fontSize: 16,
-        tabSize: 2,
-      },
     };
   },
+  computed: {
+    editor() {
+      return this.$refs.editor.getEditor();
+    }
+  },
   methods: {
+    resizeListener() {
+      this.editor.layout();
+    },
+    editorWillMount(monaco) {
+      this.monaco = monaco;
+    },
     debugQuery() {
       // this.clearMarkers();
 
@@ -137,17 +146,38 @@ export default {
       // console.log(this.content.split("\n"));
       // whyMissing.findProblems("stories", "id", 1283022, this.content);
       electron.ipcRenderer.invoke('why-missing', [
-        "stories", "id", 1283022, this.content
+        this.tableName, this.tableColumn, this.tableColumnValue, this.content
         // "pp", "id", 234505, this.content
       ]);
 
-      electron.ipcRenderer.once('why-missing-replay', function() {
+      electron.ipcRenderer.once('why-missing-replay', (event, {join, where}) => {
         // TODO: improve indexes
+        this.highlightProblems(join);
+        this.highlightProblems(where);
+
         console.log(arguments);
       });
+
+      electron.ipcRenderer.once('why-missing-failed', () => {
+        console.log('Failed', arguments);
+      })
     },
-    setEditor(editor) {
-      this.editor = editor;
+    highlightProblems(problems) {
+      problems.forEach(problem => {
+        let model = this.editor.getModel();
+        let start = model.getPositionAt(problem[0]);
+        let end   = model.getPositionAt(problem[1]);
+        console.log(start.lineNumber, start.column, end.lineNumber, end.column);
+        let range = new this.monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column);
+        let options = {
+          className: 'why-missing-problem',
+          hoverMessage: 'The record is missing in the resulset because this condition is false'
+        };
+
+        this.decorations.push({ range, options });
+
+        this.decorationIds = this.editor.deltaDecorations(this.decorationIds, this.decorations);
+      });
     },
     clearMarkers() {
       let session = this.editor.getSession();
@@ -169,7 +199,12 @@ export default {
     }
   }
 
-  .test-class {
+  .editor {
+    width: 100%;
+    height: 40vh;
+  }
+
+  .why-missing-problem {
     position: absolute;
     background: red;
     opacity: 0.4;
