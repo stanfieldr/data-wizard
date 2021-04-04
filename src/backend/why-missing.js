@@ -3,15 +3,16 @@ import getClient from "@/db";
 import parserUtils from "./parser-utils";
 import { parse, deparse } from "pgsql-parser";
 
-export default async function findProblems(table, column, value, query) {
+export default async function findProblems(schema, table, column, value, query) {
   let client = await getClient();
 
-  await client.query("SET search_path = curator");
+  await client.query(`SET search_path = ${schema}`);
 
-
-  let stmts = parse(query);
+  let stmts         = parse(query);
+  let originalQuery = deparse(stmts);
 
   // Limit real query to 1 result and select nothing for speed
+  delete stmts[0].RawStmt.stmt.SelectStmt.sortClause;
   stmts[0].RawStmt.stmt.SelectStmt.limitCount = parserUtils.wrapConst(1);
   stmts[0].RawStmt.stmt.SelectStmt.targetList = [
     {
@@ -19,13 +20,12 @@ export default async function findProblems(table, column, value, query) {
     },
   ];
 
-  console.log(JSON.stringify(stmts, null, 2));
-
   let findRecordExpr = createExprToFindRecord(table, column, value);
   let whereProblems = await findWhereProblems(stmts[0], findRecordExpr);
   let joinProblems = await findJoinProblems(stmts[0], findRecordExpr);
 
   return {
+    query: originalQuery,
     where: findIndexes(query, whereProblems),
     join:  findIndexes(query, joinProblems)
   };
@@ -43,10 +43,81 @@ export default async function findProblems(table, column, value, query) {
 
 function findIndexes(query, problems) {
   return problems.map(problem => {
-    let condition = deparse(problem);
-    let key = Object.keys(problem)[0];
-    return [problem[key].location, problem[key].location + condition.length, condition];
+    let start = findLeftMostIndex(problem);
+    let end   = findRightMostIndex(problem);
+
+    if (start === null) {
+      start = problem.location;
+    }
+
+    return [start, end, null, problem];
   });
+}
+
+function findLeftMostIndex(expr) {
+  let start = null;
+  let key   = Object.keys(expr)[0];
+
+  switch (key) {
+    case 'A_Expr':
+      start = findLeftMostIndex(expr[key].lexpr);
+      break;
+    case 'NullTest':
+      start = findLeftMostIndex(expr[key].arg);
+      break;
+    case 'BoolExpr':
+      start = expr[key].args.reduce((a, b) => {
+        let keyA = Object.keys(a)[0];
+        let keyB = Object.keys(b)[0];
+
+        let valueA = a[keyA].location;
+        let valueB = b[keyB].location;
+
+        return valueA < valueB ? a : b;
+      });
+
+      start = findLeftMostIndex(start);
+      break;
+    case 'ColumnRef':
+    case 'A_Const':
+      start = expr[key].location;
+      break;
+  }
+
+  return start;
+}
+
+function findRightMostIndex(expr) {
+  let end = null;
+  let key   = Object.keys(expr)[0];
+
+  switch (key) {
+    case 'A_Expr':
+      end = findRightMostIndex(expr[key].rexpr);
+      break;
+    case 'NullTest':
+      end = findRightMostIndex(expr[key].arg) + expr[key].nulltesttype.length;
+      break;
+    case 'BoolExpr':
+      end = expr[key].args.reduce((a, b) => {
+        let keyA = Object.keys(a)[0];
+        let keyB = Object.keys(b)[0];
+
+        let valueA = a[keyA].location;
+        let valueB = b[keyB].location;
+
+        return valueA > valueB ? a : b;
+      });
+
+      end = findRightMostIndex(end);
+      break;
+    case 'ColumnRef':
+    case 'A_Const':
+      end = expr[key].location + deparse(expr).length;
+      break;
+  }
+
+  return end;
 }
 
 function outputProblems(realQuery, problems) {

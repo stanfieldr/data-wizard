@@ -2,6 +2,10 @@
   <div class="home">
     <form @submit.prevent="debugQuery">
       <label>
+        <span>Schema:</span>
+        <input v-model="tableSchema" />
+      </label>
+      <label>
         <span>Table:</span>
         <input v-model="tableName" />
       </label>
@@ -46,6 +50,7 @@ export default {
   },
   data() {
     return {
+      tableSchema: "public",
       tableName: "stories",
       tableColumn: "id",
       tableColumnValue: 1283022,
@@ -125,6 +130,11 @@ export default {
       return this.$refs.editor.getEditor();
     }
   },
+  watch: {
+    content() {
+      this.clearMarkers();
+    }
+  },
   methods: {
     resizeListener() {
       this.editor.layout();
@@ -133,41 +143,31 @@ export default {
       this.monaco = monaco;
     },
     debugQuery() {
-      // this.clearMarkers();
-
-      // let session = this.editor.getSession();
-      // let range = new ace.Range(1, 0, 1, 1);
-
-      // // console.log(session.getTextRange(range));
-      // let markerID = session.addMarker(range, "test-class", "text", false);
-
-      // this.errorMarkers.push(markerID);
-
-      // console.log(this.content.split("\n"));
-      // whyMissing.findProblems("stories", "id", 1283022, this.content);
       electron.ipcRenderer.invoke('why-missing', [
-        this.tableName, this.tableColumn, this.tableColumnValue, this.content
-        // "pp", "id", 234505, this.content
+        this.tableSchema, this.tableName, this.tableColumn, this.tableColumnValue, this.content
       ]);
 
       electron.ipcRenderer.once('why-missing-replay', (event, {join, where}) => {
-        // TODO: improve indexes
         this.highlightProblems(join);
         this.highlightProblems(where);
-
-        console.log(arguments);
       });
 
-      electron.ipcRenderer.once('why-missing-failed', () => {
-        console.log('Failed', arguments);
+      electron.ipcRenderer.once('why-missing-failed', (event, message) => {
+        alert(message);
       })
     },
     highlightProblems(problems) {
-      problems.forEach(problem => {
+      let first = null;
+
+      problems.forEach((problem, i) => {
         let model = this.editor.getModel();
         let start = model.getPositionAt(problem[0]);
         let end   = model.getPositionAt(problem[1]);
-        console.log(start.lineNumber, start.column, end.lineNumber, end.column);
+
+        if (i === 0) {
+          first = start;
+        }
+
         let range = new this.monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column);
         let options = {
           className: 'why-missing-problem',
@@ -178,12 +178,13 @@ export default {
 
         this.decorationIds = this.editor.deltaDecorations(this.decorationIds, this.decorations);
       });
+
+      if (first) {
+        this.editor.revealLineInCenter(first.lineNumber);
+      }
     },
     clearMarkers() {
-      let session = this.editor.getSession();
-      this.errorMarkers.forEach((marker) => {
-        session.removeMarker(marker);
-      });
+      this.editor.deltaDecorations(this.decorationIds, []);
     },
   },
 };

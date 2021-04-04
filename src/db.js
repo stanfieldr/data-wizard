@@ -9,10 +9,13 @@ let client = new Client({
 });
 
 export default async function getClient() {
-  console.log('connected', connected);
   if (!connected) {
     connected = true;
-    await client.connect();
+    try {
+      await client.connect();
+    } catch (e) {
+      connected = false;
+    }
   }
 
   return client;
