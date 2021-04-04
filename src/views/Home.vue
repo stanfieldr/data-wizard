@@ -30,7 +30,7 @@
         <monaco-editor ref="editor"
           v-model="content"
           class="editor"
-          language="sql"
+          language="pgsql"
           @editorWillMount="editorWillMount" />
     </div>
   </div>
@@ -229,8 +229,7 @@ export default {
 
   .why-missing-problem {
     position: absolute;
-    background: red;
-    opacity: 0.4;
+    background: #ffebe6;
   }
 }
 </style>
